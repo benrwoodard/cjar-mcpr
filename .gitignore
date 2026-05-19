@@ -1,0 +1,29 @@
+# Credentials — never commit
+*.json
+!package.json
+!tsconfig.json
+
+# Adobe IMS / cjar token cache
+cja_auth.rds
+*.oauth
+
+# R artifacts
+.Rhistory
+.Rapp.history
+.RData
+.Rproj.user/
+*.Rproj
+.Renviron
+
+# External package source snapshots (reference only)
+cjar_src/
+mcpr_src/
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Editor
+.vscode/
+.idea/
