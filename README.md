@@ -121,8 +121,4 @@ Every tool returns a single text content block containing pretty-printed JSON. D
 ```
 cja_mcp_server.R   # The MCP server (Rscript entry point)
 README.md          # This file
-cjar_src/          # Local snapshot of cjar source used while developing
-mcpr_src/          # Local snapshot of mcpr source used while developing
 ```
-
-The `*_src/` directories are reference material and not required at runtime — they can be deleted.
