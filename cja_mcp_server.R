@@ -788,7 +788,7 @@ for (tool in tools) {
   server <- add_capability(server, tool)
 }
 
-log_stderr("Registered ", length(tools), " tools. Listening on stdio.")
+transport <- tolower(Sys.getenv("CJA_MCP_TRANSPORT", "stdio"))
 
 # mcpr's serve_io calls readLines("stdin", n=1) inside the loop, which on
 # Windows Rscript reopens stdin each iteration and only ever reads the first
@@ -806,4 +806,59 @@ serve_io_persistent <- function(mcp) {
   }
 }
 
-serve_io_persistent(server)
+# mcpr::serve_http has bugs in its body-roundtrip and middleware shape. Drive
+# ambiorix directly: read raw body, pass straight to parse_request, send
+# response. ambiorix v3 renamed res$set_header to res$header — don't use
+# middleware here (v3 swallows the request unless explicit forward semantics
+# are used, and Claude Code over localhost doesn't need CORS headers).
+serve_http_local <- function(mcp, port, path) {
+  if (!requireNamespace("ambiorix", quietly = TRUE)) {
+    stop("The 'ambiorix' package is required for HTTP transport")
+  }
+  app <- ambiorix::Ambiorix$new()
+  app$post(path, function(req, res) {
+    body <- tryCatch({
+      bytes <- req$rook.input$read()
+      if (length(bytes) == 0) "" else rawToChar(bytes)
+    }, error = function(e) {
+      log_stderr("read body error: ", conditionMessage(e))
+      ""
+    })
+    if (!nzchar(body)) {
+      res$set_status(400)
+      res$send("Empty request body")
+      return()
+    }
+    response <- tryCatch(
+      mcpr:::parse_request(body, mcp),
+      error = function(e) {
+        log_stderr("parse_request error: ", conditionMessage(e))
+        mcpr:::create_error(mcpr:::JSONRPC_PARSE_ERROR,
+                            paste("Parse error:", conditionMessage(e)))
+      }
+    )
+    if (is.null(response)) {
+      res$set_status(204)
+      res$send("")
+      return()
+    }
+    res$header("Content-Type", "application/json")
+    if (inherits(response, "jsonrpc_response") || inherits(response, "jsonrpc_error")) {
+      res$send(mcpr:::to_json(response))
+    } else {
+      res$send(response)
+    }
+  })
+  app$start(port = port)
+  invisible()
+}
+
+if (transport == "http") {
+  port <- as.integer(Sys.getenv("CJA_MCP_PORT", "7575"))
+  path <- Sys.getenv("CJA_MCP_PATH", "/mcp")
+  log_stderr("Registered ", length(tools), " tools. Listening on http://127.0.0.1:", port, path)
+  serve_http_local(server, port = port, path = path)
+} else {
+  log_stderr("Registered ", length(tools), " tools. Listening on stdio.")
+  serve_io_persistent(server)
+}
